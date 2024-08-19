@@ -18,7 +18,7 @@ const App: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
- 
+
   return (
     <Router>
       <div className="app flex flex-col min-h-screen">
