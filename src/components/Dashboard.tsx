@@ -8,7 +8,8 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
 
 interface Lesson {
   id: string;
@@ -20,6 +21,7 @@ const Dashboard: React.FC = () => {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [userRole, setUserRole] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUserRoleAndLessons = async () => {
@@ -55,8 +57,23 @@ const Dashboard: React.FC = () => {
     fetchUserRoleAndLessons();
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/signin");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
   return (
-    <div className="dashboard p-4">
+    <div className="dashboard p-4 relative">
+      <button
+        onClick={handleLogout}
+        className="absolute top-4 right-4 bg-red-500 text-white px-4 py-2 rounded"
+      >
+        Logout
+      </button>
       <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
       {userRole === "teacher" && (
         <Link

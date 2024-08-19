@@ -11,8 +11,10 @@ import { db } from "../firebase";
 
 interface Question {
   text: string;
-  options: string[];
-  correctAnswer: number;
+  type: "multiple-choice" | "short-answer";
+  options?: string[];
+  correctAnswer: number | string;
+  keyword?: string;
 }
 
 const CreateLesson: React.FC = () => {
@@ -21,11 +23,18 @@ const CreateLesson: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const navigate = useNavigate();
 
-  const handleAddQuestion = () => {
-    setQuestions([
-      ...questions,
-      { text: "", options: ["", "", "", ""], correctAnswer: 0 },
-    ]);
+  const handleAddQuestion = (type: "multiple-choice" | "short-answer") => {
+    if (type === "multiple-choice") {
+      setQuestions([
+        ...questions,
+        { text: "", type, options: ["", "", "", ""], correctAnswer: 0 },
+      ]);
+    } else {
+      setQuestions([
+        ...questions,
+        { text: "", type, correctAnswer: "", keyword: "" },
+      ]);
+    }
   };
 
   const handleQuestionChange = (
@@ -44,8 +53,10 @@ const CreateLesson: React.FC = () => {
     value: string,
   ) => {
     const updatedQuestions = [...questions];
-    updatedQuestions[questionIndex].options[optionIndex] = value;
-    setQuestions(updatedQuestions);
+    if (updatedQuestions[questionIndex].options) {
+      updatedQuestions[questionIndex].options![optionIndex] = value;
+      setQuestions(updatedQuestions);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,42 +118,86 @@ const CreateLesson: React.FC = () => {
                 className="w-full p-2 border rounded mb-2"
                 required
               />
-              {question.options.map((option, optionIndex) => (
-                <div key={optionIndex} className="flex items-center mb-2">
+              {question.type === "multiple-choice" && question.options && (
+                <>
+                  {question.options.map((option, optionIndex) => (
+                    <div key={optionIndex} className="flex items-center mb-2">
+                      <input
+                        type="text"
+                        value={option}
+                        onChange={(e) =>
+                          handleOptionChange(index, optionIndex, e.target.value)
+                        }
+                        placeholder={`Option ${optionIndex + 1}`}
+                        className="flex-grow p-2 border rounded mr-2"
+                        required
+                      />
+                      <input
+                        type="radio"
+                        name={`correct-answer-${index}`}
+                        checked={question.correctAnswer === optionIndex}
+                        onChange={() =>
+                          handleQuestionChange(
+                            index,
+                            "correctAnswer",
+                            optionIndex,
+                          )
+                        }
+                        required
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+              {question.type === "short-answer" && (
+                <>
                   <input
                     type="text"
-                    value={option}
+                    value={question.correctAnswer as string}
                     onChange={(e) =>
-                      handleOptionChange(index, optionIndex, e.target.value)
+                      handleQuestionChange(
+                        index,
+                        "correctAnswer",
+                        e.target.value,
+                      )
                     }
-                    placeholder={`Option ${optionIndex + 1}`}
-                    className="flex-grow p-2 border rounded mr-2"
+                    placeholder="Correct answer"
+                    className="w-full p-2 border rounded mb-2"
                     required
                   />
                   <input
-                    type="radio"
-                    name={`correct-answer-${index}`}
-                    checked={question.correctAnswer === optionIndex}
-                    onChange={() =>
-                      handleQuestionChange(index, "correctAnswer", optionIndex)
+                    type="text"
+                    value={question.keyword || ""}
+                    onChange={(e) =>
+                      handleQuestionChange(index, "keyword", e.target.value)
                     }
-                    required
+                    placeholder="Keyword (optional)"
+                    className="w-full p-2 border rounded mb-2"
                   />
-                </div>
-              ))}
+                </>
+              )}
             </div>
           ))}
-          <button
-            type="button"
-            onClick={handleAddQuestion}
-            className="bg-green-500 text-white px-4 py-2 rounded"
-          >
-            Add Question
-          </button>
+          <div className="flex space-x-2">
+            <button
+              type="button"
+              onClick={() => handleAddQuestion("multiple-choice")}
+              className="bg-green-500 text-white px-4 py-2 rounded"
+            >
+              Add Multiple Choice Question
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddQuestion("short-answer")}
+              className="bg-blue-500 text-white px-4 py-2 rounded"
+            >
+              Add Short Answer Question
+            </button>
+          </div>
         </div>
         <button
           type="submit"
-          className="bg-blue-500 text-white px-4 py-2 rounded"
+          className="bg-purple-500 text-white px-4 py-2 rounded"
         >
           Create Lesson
         </button>

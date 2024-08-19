@@ -2,11 +2,15 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { db, auth } from "../firebase";
+import confetti from "canvas-confetti";
+import ChatBot from "./ChatBot";
 
 interface Question {
   text: string;
-  options: string[];
-  correctAnswer: number;
+  type: "multiple-choice" | "short-answer";
+  options?: string[];
+  correctAnswer: number | string;
+  keyword?: string;
 }
 
 interface Lesson {
@@ -21,11 +25,14 @@ const Lesson: React.FC = () => {
   const navigate = useNavigate();
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | string | null>(
+    null,
+  );
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [score, setScore] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchLesson = async () => {
@@ -50,24 +57,53 @@ const Lesson: React.FC = () => {
     fetchLesson();
   }, [id]);
 
-  const handleAnswerSelection = (answerIndex: number) => {
-    setSelectedAnswer(answerIndex);
+  const handleAnswerSelection = (answer: number | string) => {
+    setSelectedAnswer(answer);
   };
 
   const handleNextQuestion = () => {
     if (selectedAnswer !== null && lesson) {
-      if (
-        selectedAnswer === lesson.questions[currentQuestionIndex].correctAnswer
-      ) {
+      const currentQuestion = lesson.questions[currentQuestionIndex];
+      let isCorrect = false;
+
+      if (currentQuestion.type === "multiple-choice") {
+        isCorrect = selectedAnswer === currentQuestion.correctAnswer;
+      } else if (currentQuestion.type === "short-answer") {
+        const userAnswer = (selectedAnswer as string).toLowerCase();
+        const correctAnswer = (
+          currentQuestion.correctAnswer as string
+        ).toLowerCase();
+        const keyword = currentQuestion.keyword?.toLowerCase();
+
+        isCorrect =
+          userAnswer === correctAnswer ||
+          (keyword && userAnswer.includes(keyword));
+      }
+
+      if (isCorrect) {
         setScore(score + 1);
-      }
-      if (currentQuestionIndex < lesson.questions.length - 1) {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
-        setSelectedAnswer(null);
+        setFeedback("Correct! Great job!");
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
       } else {
-        setQuizCompleted(true);
-        updateProgress();
+        setFeedback(
+          `Wrong. The correct answer is: ${currentQuestion.correctAnswer}`,
+        );
       }
+
+      setTimeout(() => {
+        setFeedback(null);
+        if (currentQuestionIndex < lesson.questions.length - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+          setSelectedAnswer(null);
+        } else {
+          setQuizCompleted(true);
+          updateProgress();
+        }
+      }, 2000);
     }
   };
 
@@ -78,10 +114,8 @@ const Lesson: React.FC = () => {
         const progressSnap = await getDoc(progressRef);
 
         if (!progressSnap.exists()) {
-          // If progress document doesn't exist, create it
           await setDoc(progressRef, { completedLessons: [id] });
         } else {
-          // If it exists, update it
           await updateDoc(progressRef, {
             completedLessons: arrayUnion(id),
           });
@@ -90,6 +124,44 @@ const Lesson: React.FC = () => {
         console.error("Error updating progress:", err);
         setError("Failed to update progress");
       }
+    }
+  };
+
+  const renderQuestion = (question: Question) => {
+    if (question.type === "multiple-choice" && question.options) {
+      return (
+        <div className="question mb-6">
+          <p className="font-medium text-lg mb-4">{question.text}</p>
+          {question.options.map((option, index) => (
+            <div key={index} className="option mb-3">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="answer"
+                  value={index}
+                  checked={selectedAnswer === index}
+                  onChange={() => handleAnswerSelection(index)}
+                  className="mr-3"
+                />
+                <span className="text-lg">{option}</span>
+              </label>
+            </div>
+          ))}
+        </div>
+      );
+    } else if (question.type === "short-answer") {
+      return (
+        <div className="question mb-6">
+          <p className="font-medium text-lg mb-4">{question.text}</p>
+          <input
+            type="text"
+            value={(selectedAnswer as string) || ""}
+            onChange={(e) => handleAnswerSelection(e.target.value)}
+            className="w-full p-2 border rounded"
+            placeholder="Type your answer here"
+          />
+        </div>
+      );
     }
   };
 
@@ -106,7 +178,7 @@ const Lesson: React.FC = () => {
   }
 
   return (
-    <div className="lesson p-4 max-w-3xl mx-auto">
+    <div className="lesson p-4 max-w-3xl mx-auto relative">
       <h1 className="text-3xl font-bold mb-6">{lesson.title}</h1>
       <div className="lesson-content mb-8">
         <p className="text-lg leading-relaxed">{lesson.content}</p>
@@ -114,28 +186,14 @@ const Lesson: React.FC = () => {
       {!quizCompleted ? (
         <div className="quiz bg-white shadow-md rounded-lg p-6">
           <h2 className="text-2xl font-semibold mb-4">Quiz</h2>
-          <div className="question mb-6">
-            <p className="font-medium text-lg mb-4">
-              {lesson.questions[currentQuestionIndex].text}
-            </p>
-            {lesson.questions[currentQuestionIndex].options.map(
-              (option, index) => (
-                <div key={index} className="option mb-3">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="answer"
-                      value={index}
-                      checked={selectedAnswer === index}
-                      onChange={() => handleAnswerSelection(index)}
-                      className="mr-3"
-                    />
-                    <span className="text-lg">{option}</span>
-                  </label>
-                </div>
-              ),
-            )}
-          </div>
+          {renderQuestion(lesson.questions[currentQuestionIndex])}
+          {feedback && (
+            <div
+              className={`mb-4 p-2 rounded ${feedback.includes("Correct") ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+            >
+              {feedback}
+            </div>
+          )}
           <button
             onClick={handleNextQuestion}
             disabled={selectedAnswer === null}
@@ -160,6 +218,7 @@ const Lesson: React.FC = () => {
           </button>
         </div>
       )}
+      <ChatBot lessonTitle={lesson.title} lessonContent={lesson.content} />
     </div>
   );
 };
